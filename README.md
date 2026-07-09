@@ -44,7 +44,7 @@ sudo apt install cmake sqlite3 libsqlite3-dev zlib1g-dev liblz4-dev gtkwave
 | 单个 `L2` | `make test-top-l2` | `L1D -> L2 -> TLRAM` | 单个 `L2` 的基本 `TL-C` 行为、目录、MSHR、替换、写回 | `Acquire`/`Release` 可以测，`Probe` 不一定稳定 |
 | 单个 `L2` + 伪下游 | `make test-top-l2standalone` | `L1D -> L2 -> Fake_L3` | 把 `L2` 单独拿出来接一个支持 `Acquire` 的下游 `TL manager` | 比 `test-top-l2` 更像独立 `L2` 测试，但 `Probe` 仍不如多 `L2` 稳 |
 | 一个 `L2` + 一个 `L3` | `make test-top-l2l3` | `L1I/L1D -> L2 -> L3 -> TLRAM` | `L2` 带真实 `TileLink L3` 的路径、`L1I`/`L1D` 混合入口、`ECC`/prefetch 配置 | 可观察更多下游交互，但不是最稳定的三事务截图场景 |
-| 两个 `L2` + 共享 `L3` | `make test-top-l2l3l2` | `L1D0 -> L2_0 -> L3 <- L2_1 <- L1D1` | 多 `TL-C` agent、跨 `L2` 一致性、`Probe`/`Release` 事务 | 最推荐，用于中期汇报截图 |
+| 两个 `L2` + 共享 `L3` | `make test-top-l2l3l2` | `L1D0 -> L2_0 -> L3 <- L2_1 <- L1D1` | 多 `TL-C` agent、跨 `L2` 一致性、`Probe`/`Release` 事务 | 最推荐，用于报告截图 |
 | 更完整系统 | `make test-top-fullsys` | 完整系统 `TestTop` | 集成级生成检查 | 不作为当前 `TL2TL` 主流程 |
 | `CHI` 场景 | `make test-top-chi*` | `CHI` 相关拓扑 | `CHI` 集成验证 | 当前只测 `TileLink` 时不要用 |
 
@@ -169,7 +169,7 @@ THREADS=4 scripts/run_tltest_tl2tl.sh --run-only --verbose
 [tl2tl-test] ========================================
 ```
 
-中期汇报可以截终端最后几行，至少包含：
+报告中可以截终端最后几行，至少包含：
 
 - `Finished`
 - `Transactions: 0`
@@ -218,7 +218,7 @@ gtkwave "$latest_fst" tl-test-out/l2l3l2/cpl2-tl-1490-1525.gtkw
 
 ## 事务和信号对应关系
 
-`TileLink` 五个通道里，和一致性汇报最相关的是：
+`TileLink` 五个通道里，和一致性协议分析最相关的是：
 
 | 通道 | 常见事务 | 顶层信号 |
 | --- | --- | --- |
