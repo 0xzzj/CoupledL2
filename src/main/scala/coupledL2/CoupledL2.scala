@@ -314,8 +314,7 @@ abstract class CoupledL2Base(implicit p: Parameters) extends LazyModule with Has
     }
     val l2ECCParams: Parameters = p.alterPartial {
       case EdgeInKey => node.in.head._2
-      // case EdgeOutKey => node.out.head._2
-      // case BankBitsKey => bankBits
+      case BankBitsKey => bankBits
     } // currently only EdgeInKey is used
 
     require(banks == node.in.size)

@@ -244,9 +244,13 @@ class Prefetcher(implicit p: Parameters) extends PrefetchModule {
   val tp_en = pfCtrlFromCore.l2_pf_master_en && pfCtrlFromCore.l2_tp_en
   val delay_latency = pfCtrlFromCore.l2_pf_delay_latency
 
+  private val bopConfig = prefetchers.collectFirst { case config: BOPParameters => config }
+  private val hasPBOP = bopConfig.exists(_.enablePBOP)
+  private val hasVBOP = bopConfig.exists(_.enableVBOP)
+  require(!hasBOP || hasPBOP || hasVBOP, "BOP requires at least one of PBOP or VBOP")
+
   // =================== Prefetchers =====================
-  // TODO: consider separate VBOP and PBOP in prefetch param
-  val pbop = if (hasBOP) Some(
+  val pbop = if (hasPBOP) Some(
     Module(new PBestOffsetPrefetch()(p.alterPartial({
       case L2ParamKey => p(L2ParamKey).copy(prefetch = Seq(BOPParameters(
         virtualTrain = false,
@@ -261,7 +265,7 @@ class Prefetcher(implicit p: Parameters) extends PrefetchModule {
     })))
   ) else None
 
-  val vbop = if (hasBOP) Some(
+  val vbop = if (hasVBOP) Some(
     Module(new VBestOffsetPrefetch()(p.alterPartial({
       case L2ParamKey => p(L2ParamKey).copy(prefetch = Seq(BOPParameters(
         badScore = 2,
@@ -292,7 +296,7 @@ class Prefetcher(implicit p: Parameters) extends PrefetchModule {
 
   // =================== Connection for each Prefetcher =====================
   // Rcv > VBOP > PBOP > TP
-  if (hasBOP) {
+  if (hasVBOP) {
     vbop.get.io.enable := vbop_en
     vbop.get.io.pfCtrlOfDelayLatency := delay_latency
     vbop.get.io.req.ready :=  (if(hasReceiver) !pfRcv.get.io.req.valid else true.B)
@@ -302,12 +306,19 @@ class Prefetcher(implicit p: Parameters) extends PrefetchModule {
     vbop.get.io.resp.valid := io.resp.valid && io.resp.bits.isBOP
     vbop.get.io.tlb_req <> io.tlb_req
     vbop.get.io.pbopCrossPage := true.B // pbop.io.pbopCrossPage // let vbop have noting to do with pbop
+  } else {
+    io.tlb_req.req.valid := false.B
+    io.tlb_req.req.bits := DontCare
+    io.tlb_req.req_kill := false.B
+    io.tlb_req.resp.ready := true.B
+  }
 
+  if (hasPBOP) {
     pbop.get.io.enable := pbop_en
     pbop.get.io.pfCtrlOfDelayLatency := delay_latency
     pbop.get.io.req.ready :=
       (if(hasReceiver) !pfRcv.get.io.req.valid else true.B) &&
-      (if(hasBOP) !vbop.get.io.req.valid else true.B)
+      (if(hasVBOP) !vbop.get.io.req.valid else true.B)
     pbop.get.io.train <> io.train
     pbop.get.io.train.valid := io.train.valid && (io.train.bits.reqsource =/= MemReqSource.L1DataPrefetch.id.U)
     pbop.get.io.resp <> io.resp
@@ -338,11 +349,12 @@ class Prefetcher(implicit p: Parameters) extends PrefetchModule {
     tp.get.io.resp <> io.resp
     tp.get.io.hartid := hartId
     tp.get.io.req.ready := (if(hasReceiver) !pfRcv.get.io.req.valid else true.B) &&
-      (if(hasBOP) !vbop.get.io.req.valid && !pbop.get.io.req.valid else true.B)
+      (if(hasVBOP) !vbop.get.io.req.valid else true.B) &&
+      (if(hasPBOP) !pbop.get.io.req.valid else true.B)
 
     tp.get.io.tpmeta_port <> tpio.tpmeta_port.get
   }
-  private val mbistPl = MbistPipeline.PlaceMbistPipeline(2, "MbistPipeL2Prefetcher", cacheParams.hasMbist && (hasBOP || hasTPPrefetcher))
+  private val mbistPl = MbistPipeline.PlaceMbistPipeline(2, "MbistPipeL2Prefetcher", cacheParams.hasMbist && (hasPBOP || hasVBOP || hasTPPrefetcher))
 
   // =================== Connection of all Prefetchers =====================
   /* prefetchers -> pftQueue -> pipe -> Slices.SinkA */
@@ -361,9 +373,11 @@ class Prefetcher(implicit p: Parameters) extends PrefetchModule {
     pftQueueEnqArb.io.in(rcv_idx).valid := pfRcv.get.io.req.valid
     pftQueueEnqArb.io.in(rcv_idx).bits := pfRcv.get.io.req.bits
   }
-  if (hasBOP) {
+  if (hasVBOP) {
     pftQueueEnqArb.io.in(vbop_idx).valid := vbop.get.io.req.valid
     pftQueueEnqArb.io.in(vbop_idx).bits := vbop.get.io.req.bits
+  }
+  if (hasPBOP) {
     pftQueueEnqArb.io.in(pbop_idx).valid := pbop.get.io.req.valid
     pftQueueEnqArb.io.in(pbop_idx).bits := pbop.get.io.req.bits
   }
